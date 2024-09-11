@@ -1,0 +1,421 @@
+---
+title: "FOIA data"
+author: "Nahian Haque"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+foia <- read.csv("C:/Users/nahia/Downloads/FOIA.csv")
+foia <- foia %>% 
+  mutate(`Agency.Name` = toupper(gsub("[,\\(\\).%]", "",
+                    trimws(`Agency.Name`)))) %>%
+  mutate(State_Name = 'CA')
+```
+
+```{r}
+load(file = "C:/Users/nahia/Desktop/146 Project/35158-0001-Data.rda")
+crosswalk <- da35158.0001
+crosswalk <- crosswalk %>%
+  mutate(NAME = trimws(`NAME`)) %>%
+  mutate_at(vars(7:9), as.character) %>%
+  filter(ADDRESS_STATE == "CA")
+crosswalk$ORI9 <- substr(crosswalk$ORI9, 1, nchar(crosswalk$ORI9) - 2)
+```
+
+```{r}
+foia <- foia %>%
+  left_join(crosswalk %>% select(FIPS, FIPS_ST, FIPS_COUNTY, ORI9), 
+            by = c("ORI" = "ORI9"))
+```
+
+```{r}
+foia_na <- foia[!complete.cases(foia$`FIPS`), ]
+# foia_na <- foia_na %>%
+#   select(-c(11:13))
+```
+
+```{r}
+foia_na <- foia_na %>%
+  left_join(crosswalk %>% select(FIPS, FIPS_ST, FIPS_COUNTY, NAME), 
+            by = c("Agency.Name" = "NAME"))
+```
+
+```{r}
+#write.csv(foia_na, file = "C:/Users/nahia/Desktop/146 Project/foia_na.csv")
+```
+
+```{r}
+foia_na <- read.csv("C:/Users/nahia/Desktop/146 Project/foia_na.csv")
+foia_na <- foia_na %>%
+  select(-c(1, 12:14))
+```
+
+```{r}
+foia_na <- foia_na %>%
+  left_join(crosswalk %>% select(FIPS, FIPS_ST, FIPS_COUNTY, ORI9), 
+            by = c("ORI" = "ORI9"))
+```
+
+```{r}
+foia <- foia[complete.cases(foia$`FIPS`), ]
+```
+
+```{r}
+foia <- rbind(foia, foia_na)
+```
+
+```{r}
+scores_2014 <- read.csv("C:/Users/nahia/Desktop/146 Project/2014scores.csv")
+scores_2014 <- scores_2014 %>%
+  mutate(Year = 2014)
+```
+
+```{r}
+foia <- foia %>%
+  left_join(scores_2014 %>% select(Final.Score, Year, ORI),
+            by = c("Fiscal_Year" = "Year", "ORI" = "ORI"))
+```
+
+```{r}
+scores_2015 <- read.csv("C:/Users/nahia/Desktop/146 Project/2015scores.csv")
+scores_2015 <- scores_2015 %>%
+  mutate(Year = 2015)
+```
+
+```{r}
+foia <- foia %>%
+  left_join(scores_2015 %>% select(Final.Score, Year, ORI),
+            by = c("Fiscal_Year" = "Year", "ORI" = "ORI"))
+```
+
+```{r}
+foia <- foia %>%
+  mutate(Final.Score = coalesce(Final.Score.x, Final.Score.y)) %>%
+  select(-Final.Score.x, -Final.Score.y)
+```
+
+```{r}
+scores_2016 <- read.csv("C:/Users/nahia/Desktop/146 Project/2016scores.csv")
+scores_2016 <- scores_2016 %>%
+  mutate(Year = 2016)
+```
+
+```{r}
+foia <- foia %>%
+  left_join(scores_2016 %>% select(Final.Score, Year, ORI),
+            by = c("Fiscal_Year" = "Year", "ORI" = "ORI"))
+```
+
+```{r}
+foia <- foia %>%
+  mutate(Final.Score = coalesce(Final.Score.x, Final.Score.y)) %>%
+  select(-Final.Score.x, -Final.Score.y)
+```
+
+```{r}
+scores_2017 <- read.csv("C:/Users/nahia/Desktop/146 Project/2017scores.csv")
+scores_2017 <- scores_2017 %>%
+  mutate(Year = 2017)
+```
+
+```{r}
+foia <- foia %>%
+  left_join(scores_2017 %>% select(Final.Score, Year, ORI),
+            by = c("Fiscal_Year" = "Year", "ORI" = "ORI"))
+```
+
+```{r}
+foia <- foia %>%
+  mutate(Final.Score = coalesce(Final.Score.x, Final.Score.y)) %>%
+  select(-Final.Score.x, -Final.Score.y)
+```
+
+Make dummy column for treated
+```{r}
+foia$treatment_indicator <- ifelse(foia$Funded == "Yes", 1, 0)
+```
+
+Visualize final score and # officers awarded:
+```{r}
+
+# Assuming foia is your dataframe containing the data
+
+# Create the scatterplot
+ggplot(foia, aes(x = Final.Score, y = treatment_indicator)) +
+  geom_point() +  # Add points
+  labs(x = "Final Score", y = "Number of Officers Awarded") +  # Labels for axes
+  ggtitle("Scatterplot of Number of Officers Awarded vs Final Score") +  # Title
+  theme_minimal()  # Minimal theme
+```
+
+```{r}
+foia_complete <- foia[complete.cases(foia$`Final.Score`), ]
+```
+
+Merge schools/districts into foia_complete
+```{r}
+foia_complete <- foia_complete %>%
+  left_join(treated_schools %>% select(FIPS_Code, LEAID, NCESSCH, NAME),
+            by = c("FIPS" = "FIPS_Code"))
+```
+
+```{r}
+foia_complete <- foia_complete %>%
+  left_join(untreated_schools %>% select(FIPS_Code, LEAID, NCESSCH, NAME),
+            by = c("FIPS" = "FIPS_Code"))
+```
+
+```{r}
+foia_complete <- foia_complete %>%
+  mutate(
+    LEAID = coalesce(LEAID.x, LEAID.y),
+    NCESSCH = coalesce(NCESSCH.x, NCESSCH.y)) %>%
+  select(-LEAID.x, -LEAID.y, -NCESSCH.x, -NCESSCH.y)
+```
+
+```{r}
+foia_complete <- foia_complete %>%
+  mutate(
+    NAME = coalesce(NAME.x, NAME.y)) %>%
+  select(-NAME.x, -NAME.y)
+```
+
+```{r}
+foia_complete$p_score <- scale(foia_complete$Final.Score, 
+                               center = min(foia_complete$Final.Score), 
+                               scale = max(foia_complete$Final.Score) - min(foia_complete$Final.Score))
+```
+
+```{r}
+library(ggplot2)
+
+# Assuming foia is your dataframe containing the data
+
+# Create histograms for p_score for treated and untreated schools
+histogram <- ggplot() +
+  geom_histogram(data = foia_complete[foia_complete$treatment_indicator == 1, ], aes(x = p_score), fill = "blue", alpha = 0.5, bins = 20) +
+  geom_histogram(data = foia_complete[foia_complete$treatment_indicator == 0, ], aes(x = p_score), fill = "red", alpha = 0.5, bins = 20) +
+  labs(title = "Histogram of Propensity Scores", x = "p_score", y = "Frequency") +
+  scale_fill_identity(name = "Treatment Indicator", labels = c("Treated", "Untreated")) +
+  theme_minimal()
+
+# Plot histogram
+print(histogram)
+```
+
+
+```{r}
+foia_2014 <- foia_complete %>%
+  filter(Fiscal_Year == 2014)
+foia_2015 <- foia_complete %>%
+  filter(Fiscal_Year == 2015)
+foia_2016 <- foia_complete %>%
+  filter(Fiscal_Year == 2016)
+foia_2017 <- foia_complete %>%
+  filter(Fiscal_Year == 2017)
+```
+
+```{r}
+cal_schools <- read.csv("C:/Users/nahia/Desktop/146 Project/pubschls.csv")
+```
+
+```{r}
+#cal_schools$CDSCode <- substr(cal_schools$CDSCode,  3, nchar(cal_schools$CDSCode))
+cal_schools$NCESSCH <- paste(cal_schools$NCESDist, cal_schools$NCESSchool, sep = "")
+```
+
+```{r}
+absent_2016_17 <- read.csv("C:/Users/nahia/Desktop/146 Project/2016_17absenteeism.csv")
+absent_2016_17$CDSCode <- as.character(absent_2016_17$CDSCode)
+```
+
+```{r}
+absent_2016_17 <- absent_2016_17 %>%
+  left_join(cal_schools %>% select(CDSCode, NCESDist, NCESSchool),
+            by=c("CDSCode"))
+```
+
+```{r}
+absent_2016_17$NCESSCH <- paste(absent_2016_17$NCESDist, absent_2016_17$NCESSchool, sep = "")
+```
+
+```{r}
+absent_2017_19 <- read.csv("C:/Users/nahia/Desktop/146 Project/chronicdownload2019.csv")
+absent_2017_19$cds <- as.character(absent_2017_19$cds)
+absent_2017_19$cds <- substr(absent_2017_19$cds,  3, nchar(absent_2017_19$cds))
+absent_2017_19 <- absent_2017_19 %>%
+  left_join(cal_schools %>% select(CDSCode, NCESDist, NCESSchool),
+            by=c("cds" = "CDSCode"))
+absent_2017_19$NCESSCH <- paste(absent_2017_19$NCESDist, absent_2017_19$NCESSchool, sep = "")
+```
+
+```{r}
+absent_2017_19_all <- absent_2017_19 %>%
+  filter(studentgroup == "ALL")
+```
+
+------
+##Chronic Absenteeism - how does CHP affect CA in NEXT year?
+
+Merge CRDC CA Data (2015) into foia_2014
+```{r}
+foia_2014 <- foia_2014 %>% 
+  left_join(schools_2014  %>% select(NCESSCH, percent_ca),
+            by=("NCESSCH" = "NCESSCH"))
+```
+
+```{r}
+foia_2014$percent_ca <- foia_2014$percent_ca * 100
+```
+
+Merge CA Data (2016) into foia_2015
+```{r}
+foia_2015 <- foia_2015 %>% 
+  left_join(absent_2016_17 %>% select(NCESSCH, ChronicAbsenteeismRate),
+            by=("NCESSCH"))
+```
+
+Merge CA Data (2017) into foia_2016
+```{r}
+foia_2016 <- foia_2016 %>%
+  left_join(absent_2017_19_all %>% select(NCESSCH, ChronicAbsenteeismRate_1718),
+            by=("NCESSCH"))
+```
+
+Merge CA Data (2018) into foia_2017
+```{r}
+foia_2017 <- foia_2017 %>%
+  left_join(absent_2017_19_all %>% select(NCESSCH, ChronicAbsenteeismRate_1819),
+            by=("NCESSCH"))
+```
+
+Rename columns for foia 2015, 2016, 2017
+```{r}
+foia_2015 <- foia_2015 %>%
+  rename(percent_ca = ChronicAbsenteeismRate)
+foia_2016 <- foia_2016 %>%
+  rename(percent_ca = ChronicAbsenteeismRate_1718)
+foia_2017 <- foia_2017 %>%
+  rename(percent_ca = ChronicAbsenteeismRate_1819)
+```
+
+Merge
+```{r}
+foia_absent_all <- rbind(foia_2014, foia_2015, foia_2016, foia_2017)
+```
+
+IPW:
+
+```{r}
+
+foia_absent_all$ipw_weights <- ifelse(foia_absent_all$treatment_indicator == 1,
+                                      1 / foia_absent_all$p_score,
+                                      -1 / (1 - foia_absent_all$p_score))
+foia_absent_all$yXweights <- foia_absent_all$ipw_weights * foia_absent_all$percent_ca
+
+
+foia_absent_all_omit <- na.omit(foia_absent_all)
+
+
+ate <- mean(foia_absent_all_omit$yXweights)
+ate_se <- sd(foia_absent_all_omit$yXweights) / sqrt(length(foia_absent_all_omit$yXweights))
+tstat <- ate / ate_se
+pval <- 2*(pnorm(1 - abs(tstat)))
+cat("ATE:", ate, "\nATE Standard Error:", ate_se, "\nT-statistic:", tstat, "\nP-value:", sprintf("%.20f", pval), "\n")
+```
+```{r}
+foia_absent_all_omit2 <- na.omit(foia_absent_all)
+W <- foia_absent_all_omit2$treatment_indicator
+Y <- foia_absent_all_omit2$percent_ca
+e.hat <- foia_absent_all_omit2$p_score
+
+# Check for missing values
+if (any(is.na(W)) || any(is.na(Y)) || any(is.na(e.hat))) {
+  stop("Missing values detected in the variables.")
+}
+
+e.hat_filtered <- e.hat[!(e.hat == 0 | e.hat == 1)]
+Y <- Y[!(e.hat == 0 | e.hat == 1)]
+W <- W[!(e.hat == 0 | e.hat == 1)]
+
+# # Check for division by zero
+# if (any(e.hat == 0) || any(e.hat == 1)) {
+#   stop("Division by zero detected in e.hat.")
+# }
+
+
+z <- Y * (W/e.hat_filtered - (1-W)/(1-e.hat_filtered))
+ate.est <- mean(z)
+ate.se <- sd(z) / sqrt(length(z))
+ate.tstat <- ate.est / ate.se
+ate.pvalue <- 2*(pnorm(1 - abs(ate.est/ate.se)))
+
+ate.results <- c(estimate=ate.est, std.error=ate.se, t.stat=ate.tstat, pvalue=ate.pvalue)
+print(ate.results)
+```
+
+```{r}
+foia_2015_omit <- na.omit(foia_2015)
+W <- foia_2015_omit$treatment_indicator
+Y <- foia_2015_omit$percent_ca
+e.hat <- foia_2015_omit$p_score
+
+
+e.hat_filtered <- e.hat[!(e.hat == 0 | e.hat == 1)]
+Y <- Y[!(e.hat == 0 | e.hat == 1)]
+W <- W[!(e.hat == 0 | e.hat == 1)]
+
+
+z <- Y * (W/e.hat_filtered - (1-W)/(1-e.hat_filtered))
+ate.est <- mean(z)
+ate.se <- sd(z) / sqrt(length(z))
+ate.tstat <- ate.est / ate.se
+ate.pvalue <- 2*(pnorm(1 - abs(ate.est/ate.se)))
+
+ate.results <- c(estimate=ate.est, std.error=ate.se, t.stat=ate.tstat, pvalue=ate.pvalue)
+print(ate.results)
+```
+
+```{r}
+foia_2015_omit$ipw_weights <- ifelse(foia_2015_omit$treatment_indicator == 1,
+                                      1 / foia_2015_omit$p_score,
+                                      -1 / (1 - foia_2015_omit$p_score))
+foia_2015_omit$yXweights <- foia_2015_omit$ipw_weights * foia_2015_omit$percent_ca
+
+
+
+ate <- mean(foia_2015_omit$yXweights)
+ate_se <- sd(foia_2015_omit$yXweights) / sqrt(length(foia_2015_omit$yXweights))
+tstat <- ate / ate_se
+pval <- 2*(pnorm(1 - abs(tstat)))
+cat("ATE:", ate, "\nATE Standard Error:", ate_se, "\nT-statistic:", tstat, "\nP-value:", sprintf("%.20f", pval), "\n")
+```
+```{r}
+W <- foia_2015_omit$treatment_indicator
+Y <- foia_2015_omit$percent_ca
+e.hat <- foia_2015_omit$p_score
+
+z <- Y * (W/e.hat - (1-W)/(1-e.hat))
+
+ate.est <- mean(z)
+ate.se <- sd(z) / sqrt(length(z))
+ate.tstat <- ate.est / ate.se
+ate.pvalue <- 2*(pnorm(1 - abs(ate.est/ate.se)))
+
+ate.results <- c(estimate=ate.est, std.error=ate.se, t.stat=ate.tstat, pvalue=ate.pvalue)
+print(ate.results)
+```
+```{r}
+ggplot(foia_2015_omit, aes(x = p_score, y = percent_ca)) +
+  geom_point() +  # Add points
+  labs(x = "p_score", y = "percent_ca") +  # Labels for axes
+  ggtitle("Scatterplot") +  # Title
+  theme_minimal()  # Minimal theme
+```
+
+

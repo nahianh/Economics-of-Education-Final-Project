@@ -1,0 +1,1002 @@
+---
+title: "foia2"
+author: "Nahian Haque"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(splines)
+library(glmnet)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(DescTools)
+library(stringr)
+library(stringdist)
+library(grf)
+```
+
+```{r}
+foia_complete <- foia_complete %>%
+  left_join(cal_schools %>% select(NCESSCH, CDSCode),
+            by="NCESSCH")
+```
+
+```{r}
+foia_complete$CDSCode <- substr(foia_complete$CDSCode,  3, nchar(foia_complete$CDSCode))
+```
+
+```{r}
+foia_2014 <- foia_complete %>%
+  filter(Fiscal_Year == 2014)
+foia_2015 <- foia_complete %>%
+  filter(Fiscal_Year == 2015)
+foia_2016 <- foia_complete %>%
+  filter(Fiscal_Year == 2016)
+foia_2017 <- foia_complete %>%
+  filter(Fiscal_Year == 2017)
+```
+
+##Covariate data SY 2015-16
+
+```{r}
+enrlmt_15 <- filesenr.asp
+enrlmt_15 <- enrlmt_15 %>%
+  mutate(ETHNIC = case_when(
+    ETHNIC == 0 ~ "Not reported",          # Replace 0 with "Not reported"
+    ETHNIC == 1 ~ "American Indian",       # Replace 1 with "American Indian"
+    ETHNIC == 2 ~ "Asian",                 # Replace 2 with "Asian"
+    ETHNIC == 3 ~ "Pacific Islander",      # Replace 3 with "Pacific Islander"
+    ETHNIC == 4 ~ "Filipino",              # Replace 4 with "Filipino"
+    ETHNIC == 5 ~ "Hispanic or Latino",    # Replace 5 with "Hispanic or Latino"
+    ETHNIC == 6 ~ "African American",      # Replace 6 with "African American"
+    ETHNIC == 7 ~ "White",                 # Replace 7 with "White"
+    ETHNIC == 9 ~ "Two or More Races",     # Replace 9 with "Two or More Races"
+    TRUE ~ as.character(ETHNIC)            # If none of the above conditions match, keep the original value
+  )) %>%
+  mutate(CDS_CODE = as.character(CDS_CODE))  # Convert CDSCode column to character type
+
+enrlmt_15 <- enrlmt_15 %>%
+  group_by(CDS_CODE) %>%
+  mutate(total_enrollment = sum(ENR_TOTAL, na.rm = TRUE)) %>%
+  group_by(CDS_CODE, ETHNIC) %>%
+  mutate(race_count = sum(ENR_TOTAL)) %>%
+  ungroup() %>%
+  filter(GENDER == "F") %>%
+  mutate(GENDER = case_when(
+    GENDER == "F" ~ "ALL"
+  )) %>%
+  mutate(percent_race = race_count / total_enrollment * 100) %>%
+  filter(ETHNIC %in% c("American Indian", "Asian", "Pacific Islander", "Filipino", "Hispanic or Latino", "African American", "White", "Two or More Races")) %>%
+  pivot_wider(names_from = ETHNIC, values_from = percent_race, values_fill = NA_real_)
+
+enrlmt_15 <- enrlmt_15 %>%
+  select(-c(2:24))
+
+enrlmt_15 <- enrlmt_15  %>% 
+  group_by(CDS_CODE) %>%
+  summarise_all(list(~ifelse(all(is.na(.)), NA, na.omit(.))))
+
+enrlmt_15$CDS_CODE <- substr(enrlmt_15$CDS_CODE,  3, nchar(enrlmt_15$CDS_CODE))
+```
+
+```{r}
+frpm1516 <- read.csv("C:/Users/nahia/Downloads/frpm1516.csv")
+frpm1516$School.Code <- str_pad(frpm1516$School.Code, width = 7, pad = "0")
+frpm1516$District.Code <- str_pad(frpm1516$District.Code, width = 5, pad = "0")
+frpm1516$CDSCode <- paste(frpm1516$District.Code, frpm1516$School.Code, sep = "")
+enrlmt_15 <- enrlmt_15 %>%
+  left_join(frpm1516 %>% select(CDSCode, Percent......Eligible.Free...K.12.),
+            by=c("CDS_CODE" = "CDSCode"))
+```
+
+SY 2016-17
+
+```{r}
+enrlmt_1617 <- enrlmt_1617 %>%
+  mutate(ETHNIC = case_when(
+    ETHNIC == 0 ~ "Not reported",          # Replace 0 with "Not reported"
+    ETHNIC == 1 ~ "American Indian",       # Replace 1 with "American Indian"
+    ETHNIC == 2 ~ "Asian",                 # Replace 2 with "Asian"
+    ETHNIC == 3 ~ "Pacific Islander",      # Replace 3 with "Pacific Islander"
+    ETHNIC == 4 ~ "Filipino",              # Replace 4 with "Filipino"
+    ETHNIC == 5 ~ "Hispanic or Latino",    # Replace 5 with "Hispanic or Latino"
+    ETHNIC == 6 ~ "African American",      # Replace 6 with "African American"
+    ETHNIC == 7 ~ "White",                 # Replace 7 with "White"
+    ETHNIC == 9 ~ "Two or More Races",     # Replace 9 with "Two or More Races"
+    TRUE ~ as.character(ETHNIC)            # If none of the above conditions match, keep the original value
+  )) %>%
+  mutate(CDS_CODE = as.character(CDS_CODE))  # Convert CDSCode column to character type
+
+enrlmt_1617 <- enrlmt_1617 %>%
+  group_by(CDS_CODE) %>%
+  mutate(total_enrollment = sum(ENR_TOTAL, na.rm = TRUE)) %>%
+  group_by(CDS_CODE, ETHNIC) %>%
+  mutate(race_count = sum(ENR_TOTAL)) %>%
+  ungroup() %>%
+  filter(GENDER == "F") %>%
+  mutate(GENDER = case_when(
+    GENDER == "F" ~ "ALL"
+  )) %>%
+  mutate(percent_race = race_count / total_enrollment * 100) %>%
+  filter(ETHNIC %in% c("American Indian", "Asian", "Pacific Islander", "Filipino", "Hispanic or Latino", "African American", "White", "Two or More Races")) %>%
+  pivot_wider(names_from = ETHNIC, values_from = percent_race, values_fill = NA_real_)
+
+enrlmt_1617 <- enrlmt_1617 %>%
+  select(-c(2:24))
+
+enrlmt_1617 <- enrlmt_1617  %>% 
+  group_by(CDS_CODE) %>%
+  summarise_all(list(~ifelse(all(is.na(.)), NA, na.omit(.))))
+
+enrlmt_1617$CDS_CODE <- substr(enrlmt_1617$CDS_CODE,  3, nchar(enrlmt_1617$CDS_CODE))
+```
+
+```{r}
+frpm1617 <- read.csv("C:/Users/nahia/Downloads/frpm1617.csv")
+frpm1617$School.Code <- str_pad(frpm1617$School.Code, width = 7, pad = "0")
+frpm1617$District.Code <- str_pad(frpm1617$District.Code, width = 5, pad = "0")
+frpm1617$CDSCode <- paste(frpm1617$District.Code, frpm1617$School.Code, sep = "")
+frpm1617$Percent......Eligible.Free...K.12. <- frpm1617$Percent......Eligible.Free...K.12. * 100
+enrlmt_1617 <- enrlmt_1617 %>%
+  left_join(frpm1617 %>% select(CDSCode, Percent......Eligible.Free...K.12.),
+            by=c("CDS_CODE" = "CDSCode"))
+```
+
+SY 2017-18
+
+```{r}
+enrlmt_1718 <- read.delim2("C:/Users/nahia/Downloads/filesenr.asp(2).txt")
+enrlmt_1718 <- enrlmt_1718 %>% 
+  mutate(ETHNIC = case_when(
+    ETHNIC == 0 ~ "Not reported",          # Replace 0 with "Not reported"
+    ETHNIC == 1 ~ "American Indian",       # Replace 1 with "American Indian"
+    ETHNIC == 2 ~ "Asian",                 # Replace 2 with "Asian"
+    ETHNIC == 3 ~ "Pacific Islander",      # Replace 3 with "Pacific Islander"
+    ETHNIC == 4 ~ "Filipino",              # Replace 4 with "Filipino"
+    ETHNIC == 5 ~ "Hispanic or Latino",    # Replace 5 with "Hispanic or Latino"
+    ETHNIC == 6 ~ "African American",      # Replace 6 with "African American"
+    ETHNIC == 7 ~ "White",                 # Replace 7 with "White"
+    ETHNIC == 9 ~ "Two or More Races",     # Replace 9 with "Two or More Races"
+    TRUE ~ as.character(ETHNIC)            # If none of the above conditions match, keep the original value
+  )) %>%
+  mutate(CDS_CODE = as.character(CDS_CODE))  # Convert CDSCode column to character type
+
+enrlmt_1718 <- enrlmt_1718 %>%
+  group_by(CDS_CODE) %>%
+  mutate(total_enrollment = sum(ENR_TOTAL, na.rm = TRUE)) %>%
+  group_by(CDS_CODE, ETHNIC) %>%
+  mutate(race_count = sum(ENR_TOTAL)) %>%
+  ungroup() %>%
+  filter(GENDER == "F") %>%
+  mutate(GENDER = case_when(
+    GENDER == "F" ~ "ALL"
+  )) %>%
+  mutate(percent_race = race_count / total_enrollment * 100) %>%
+  filter(ETHNIC %in% c("American Indian", "Asian", "Pacific Islander", "Filipino", "Hispanic or Latino", "African American", "White", "Two or More Races")) %>%
+  pivot_wider(names_from = ETHNIC, values_from = percent_race, values_fill = NA_real_)
+
+enrlmt_1718 <- enrlmt_1718 %>%
+  select(-c(2:24))
+
+enrlmt_1718 <- enrlmt_1718  %>% 
+  group_by(CDS_CODE) %>%
+  summarise_all(list(~ifelse(all(is.na(.)), NA, na.omit(.))))
+
+enrlmt_1718$CDS_CODE <- substr(enrlmt_1718$CDS_CODE,  3, nchar(enrlmt_1718$CDS_CODE))
+```
+
+```{r}
+frpm1718 <- read.csv("C:/Users/nahia/Downloads/frpm1718.csv")
+frpm1718$School.Code <- str_pad(frpm1718$School.Code, width = 7, pad = "0")
+frpm1718$District.Code <- str_pad(frpm1718$District.Code, width = 5, pad = "0")
+frpm1718$CDSCode <- paste(frpm1718$District.Code, frpm1718$School.Code, sep = "")
+frpm1718$Percent......Eligible.Free...K.12. <- gsub("%", "", frpm1718$Percent......Eligible.Free...K.12.)
+frpm1718$Percent......Eligible.Free...K.12. <- as.numeric(frpm1718$Percent......Eligible.Free...K.12.)
+enrlmt_1718 <- enrlmt_1718 %>%
+  left_join(frpm1718 %>% select(CDSCode, Percent......Eligible.Free...K.12.),
+            by=c("CDS_CODE" = "CDSCode"))
+```
+
+SY 2018-19
+```{r}
+enrlmt_1819 <- read.delim2("C:/Users/nahia/Downloads/filesenr.asp(3).txt")
+enrlmt_1819 <- enrlmt_1819 %>% 
+  mutate(ETHNIC = case_when(
+    ETHNIC == 0 ~ "Not reported",          # Replace 0 with "Not reported"
+    ETHNIC == 1 ~ "American Indian",       # Replace 1 with "American Indian"
+    ETHNIC == 2 ~ "Asian",                 # Replace 2 with "Asian"
+    ETHNIC == 3 ~ "Pacific Islander",      # Replace 3 with "Pacific Islander"
+    ETHNIC == 4 ~ "Filipino",              # Replace 4 with "Filipino"
+    ETHNIC == 5 ~ "Hispanic or Latino",    # Replace 5 with "Hispanic or Latino"
+    ETHNIC == 6 ~ "African American",      # Replace 6 with "African American"
+    ETHNIC == 7 ~ "White",                 # Replace 7 with "White"
+    ETHNIC == 9 ~ "Two or More Races",     # Replace 9 with "Two or More Races"
+    TRUE ~ as.character(ETHNIC)            # If none of the above conditions match, keep the original value
+  )) %>%
+  mutate(CDS_CODE = as.character(CDS_CODE))  # Convert CDSCode column to character type
+
+enrlmt_1819 <- enrlmt_1819 %>%
+  group_by(CDS_CODE) %>%
+  mutate(total_enrollment = sum(ENR_TOTAL, na.rm = TRUE)) %>%
+  group_by(CDS_CODE, ETHNIC) %>%
+  mutate(race_count = sum(ENR_TOTAL)) %>%
+  ungroup() %>%
+  filter(GENDER == "F") %>%
+  mutate(GENDER = case_when(
+    GENDER == "F" ~ "ALL"
+  )) %>%
+  mutate(percent_race = race_count / total_enrollment * 100) %>%
+  filter(ETHNIC %in% c("American Indian", "Asian", "Pacific Islander", "Filipino", "Hispanic or Latino", "African American", "White", "Two or More Races")) %>%
+  pivot_wider(names_from = ETHNIC, values_from = percent_race, values_fill = NA_real_)
+
+enrlmt_1819 <- enrlmt_1819 %>%
+  select(-c(2:24))
+
+enrlmt_1819 <- enrlmt_1819  %>% 
+  group_by(CDS_CODE) %>%
+  summarise_all(list(~ifelse(all(is.na(.)), NA, na.omit(.))))
+
+enrlmt_1819$CDS_CODE <- substr(enrlmt_1819$CDS_CODE,  3, nchar(enrlmt_1819$CDS_CODE))
+```
+```{r}
+frpm1819 <- read.csv("C:/Users/nahia/Downloads/frpm1819.csv")
+frpm1819$School.Code <- str_pad(frpm1819$School.Code, width = 7, pad = "0")
+frpm1819$District.Code <- str_pad(frpm1819$District.Code, width = 5, pad = "0")
+frpm1819$CDSCode <- paste(frpm1819$District.Code, frpm1819$School.Code, sep = "")
+frpm1819$Percent......Eligible.Free...K.12. <- gsub("%", "", frpm1819$Percent......Eligible.Free...K.12.)
+frpm1819$Percent......Eligible.Free...K.12. <- as.numeric(frpm1819$Percent......Eligible.Free...K.12.)
+enrlmt_1819 <- enrlmt_1819 %>%
+  left_join(frpm1819 %>% select(CDSCode, Percent......Eligible.Free...K.12.),
+            by=c("CDS_CODE" = "CDSCode"))
+```
+
+##Merge covariate data
+
+```{r}
+foia_2014 <- foia_2014 %>%
+  left_join(enrlmt_15, by = c("CDSCode" = "CDS_CODE"))
+```
+
+```{r}
+foia_2014$Percent......Eligible.Free...K.12. <- foia_2014$Percent......Eligible.Free...K.12. * 100
+```
+
+```{r}
+foia_2015 <- foia_2015 %>%
+  left_join(enrlmt_1617, by = c("CDSCode" = "CDS_CODE"))
+```
+
+```{r}
+foia_2016 <- foia_2016 %>%
+  left_join(enrlmt_1718, by = c("CDSCode" = "CDS_CODE"))
+```
+
+```{r}
+foia_2017 <- foia_2017 %>%
+  left_join(enrlmt_1819, by = c("CDSCode" = "CDS_CODE"))
+```
+
+##Merge outcome data
+
+```{r}
+foia_2014 <- foia_2014 %>%
+  left_join(schools_2014 %>% select(NCESSCH, percent_ca)
+            %>% filter(percent_ca >= 0 & percent_ca <= 1), by = "NCESSCH")
+```
+
+```{r}
+foia_2014$percent_ca <- foia_2014$percent_ca*100
+```
+
+```{r}
+foia_2014 <- distinct(foia_2014)
+```
+
+```{r}
+foia2_2014 <- foia_2014 %>%
+  group_by(NAME) %>%
+  slice_max(Final.Score) %>%
+  ungroup()
+```
+
+```{r}
+foia2_2014 <- foia2_2014[complete.cases(foia2_2014$percent_ca), ]
+```
+
+```{r}
+foia2_2014 <- foia2_2014 %>%
+  filter(!rowSums(is.na(.[21:28])) == length(21:28))
+```
+
+```{r}
+foia2_2014 <- foia2_2014 %>%
+  mutate(across(21:29, ~ ifelse(is.na(.), 0, .)))
+```
+
+```{r}
+foia_2015 <- foia_2015 %>%
+  left_join(absent_2016_17 %>% select(NCESSCH, ChronicAbsenteeismRate, CDSCode)
+            %>% filter(ChronicAbsenteeismRate >= 0 & ChronicAbsenteeismRate <= 100), by = "CDSCode")
+```
+
+```{r}
+foia_2015 <- foia_2015 %>%
+  select(-c(30:33))
+```
+
+```{r}
+foia_2015 <- distinct(foia_2015)
+foia2_2015 <- foia_2015 %>%
+  group_by(NAME) %>%
+  slice_max(Final.Score) %>%
+  ungroup()
+```
+
+```{r}
+foia2_2015 <- foia2_2015[complete.cases(foia2_2015$ChronicAbsenteeismRate), ]
+foia2_2015 <- foia2_2015 %>%
+  filter(!rowSums(is.na(.[21:28])) == length(21:28))
+foia2_2015 <- foia2_2015 %>%
+  mutate(across(21:29, ~ ifelse(is.na(.), 0, .)))
+```
+
+```{r}
+foia_2016 <- foia_2016 %>%
+  left_join(absent_2017_19_all %>% select(NCESSCH, ChronicAbsenteeismRate_1718, cds)
+            %>% filter(ChronicAbsenteeismRate_1718 >= 0 & ChronicAbsenteeismRate_1718 <= 100), by = c("CDSCode" = "cds"))
+```
+
+```{r}
+# foia_2016 <- foia_2016 %>%
+#   select(-c(29, 31))
+```
+
+```{r}
+foia_2016 <- distinct(foia_2016)
+foia2_2016 <- foia_2016 %>%
+  group_by(NAME) %>%
+  slice_max(Final.Score) %>%
+  ungroup()
+```
+```{r}
+foia2_2016 <- foia2_2016 %>%
+  select(-c(30))
+```
+
+
+```{r}
+foia2_2016 <- foia2_2016[complete.cases(foia2_2016$ChronicAbsenteeismRate_1718), ]
+foia2_2016 <- foia2_2016 %>%
+  filter(!rowSums(is.na(.[21:28])) == length(21:28))
+foia2_2016 <- foia2_2016 %>%
+  mutate(across(21:29, ~ ifelse(is.na(.), 0, .)))
+```
+```{r}
+# foia2_2016 <- foia2_2016 %>%
+#   rename(Percent......Eligible.Free...K.12. = Percent......Eligible.Free...K.12..y)
+```
+
+```{r}
+foia_2017 <- foia_2017 %>%
+  left_join(absent_2017_19_all %>% select(NCESSCH, ChronicAbsenteeismRate_1819, cds)
+            %>% filter(ChronicAbsenteeismRate_1819 >= 0 & ChronicAbsenteeismRate_1819 <= 100), by = c("CDSCode" = "cds"))
+```
+```{r}
+foia_2017 <- distinct(foia_2017)
+foia2_2017 <- foia_2017 %>%
+  group_by(NAME) %>%
+  slice_max(Final.Score) %>%
+  ungroup()
+```
+```{r}
+foia2_2017 <- foia2_2017[complete.cases(foia2_2017$ChronicAbsenteeismRate_1819), ]
+foia2_2017 <- foia2_2017 %>%
+  filter(!rowSums(is.na(.[21:28])) == length(21:28))
+foia2_2017 <- foia2_2017 %>%
+  mutate(across(21:29, ~ ifelse(is.na(.), 0, .)))
+```
+
+##Analysis - by year
+
+2014 Data: DO NOT CHANGE OR RUN THIS AGAIN
+
+```{r}
+covariates <- c("Final.Score", "Asian",  "African American", "Filipino", "Hispanic or Latino", "American Indian", "Pacific Islander", "Two or More Races", "White", "Percent......Eligible.Free...K.12.")
+
+fmla <- as.formula(paste0("~", paste0("bs(`", covariates, "`, df=3)", collapse="+")))
+W <- foia2_2014$treatment_indicator
+#W <- foia2_2014[,"treatment_indicator"]
+#W <- as.numeric(W)
+Y <- foia2_2014$percent_ca
+XX <- model.matrix(fmla, foia2_2014)
+logit <- cv.glmnet(x=XX, y=W, family="binomial")
+e.hat <- predict(logit, XX, s = "lambda.min", type="response")
+
+if (any(is.na(W)) || any(is.na(Y)) || any(is.na(e.hat))) {
+  stop("Missing values detected in the variables.")
+}
+e.hat_filtered <- e.hat[!(e.hat == 0 | e.hat == 1)]
+Y <- Y[!(e.hat == 0 | e.hat == 1)]
+W <- W[!(e.hat == 0 | e.hat == 1)]
+
+
+z <- Y * (W/e.hat_filtered - (1-W)/(1-e.hat_filtered))
+
+# if (any(e.hat == 0) || any(e.hat == 1)) {
+#  stop("Division by zero detected in e.hat.")
+# }
+
+# Using the fact that
+#z <- Y * (W/e.hat - (1-W)/(1-e.hat))
+ate.est <- mean(z)
+ate.se <- sd(z) / sqrt(length(z))
+ate.tstat <- ate.est / ate.se
+ate.pvalue <- 2*(pnorm(1 - abs(ate.est/ate.se)))
+ate.results <- c(estimate=ate.est, std.error=ate.se, t.stat=ate.tstat, pvalue=ate.pvalue)
+print(ate.results)
+```
+
+2015 Data
+
+```{r}
+fmla <- as.formula(paste0("~", paste0("bs(`", covariates, "`, df=3)", collapse="+")))
+W <- foia2_2015$treatment_indicator
+Y <- foia2_2015$ChronicAbsenteeismRate
+XX <- model.matrix(fmla, foia2_2015)
+logit <- cv.glmnet(x=XX, y=W, family="binomial")
+e.hat <- predict(logit, XX, s = "lambda.min", type="response")
+
+if (any(is.na(W)) || any(is.na(Y)) || any(is.na(e.hat))) {
+  stop("Missing values detected in the variables.")
+}
+
+# if (any(e.hat == 0) || any(e.hat == 1)) {
+#  stop("Division by zero detected in e.hat.")
+# }
+
+e.hat_filtered <- e.hat[!(e.hat == 0 | e.hat == 1)]
+Y <- Y[!(e.hat == 0 | e.hat == 1)]
+W <- W[!(e.hat == 0 | e.hat == 1)]
+
+
+z <- Y * (W/e.hat_filtered - (1-W)/(1-e.hat_filtered))
+
+# Using the fact that
+#z <- Y * (W/e.hat - (1-W)/(1-e.hat))
+ate.est <- mean(z)
+ate.se <- sd(z) / sqrt(length(z))
+ate.tstat <- ate.est / ate.se
+ate.pvalue <- 2*(pnorm(1 - abs(ate.est/ate.se)))
+ate.results <- c(estimate=ate.est, std.error=ate.se, t.stat=ate.tstat, pvalue=ate.pvalue)
+print(ate.results)
+```
+
+2016 Data
+
+```{r}
+fmla <- as.formula(paste0("~", paste0("bs(`", covariates, "`, df=3)", collapse="+")))
+W <- foia2_2016$treatment_indicator
+Y <- foia2_2016$ChronicAbsenteeismRate_1718
+XX <- model.matrix(fmla, foia2_2016)
+logit <- cv.glmnet(x=XX, y=W, family="binomial")
+e.hat <- predict(logit, XX, s = "lambda.min", type="response")
+
+if (any(is.na(W)) || any(is.na(Y)) || any(is.na(e.hat))) {
+  stop("Missing values detected in the variables.")
+}
+
+# if (any(e.hat == 0) || any(e.hat == 1)) {
+#  stop("Division by zero detected in e.hat.")
+# }
+
+e.hat_filtered <- e.hat[!(e.hat == 0 | e.hat == 1)]
+Y <- Y[!(e.hat == 0 | e.hat == 1)]
+W <- W[!(e.hat == 0 | e.hat == 1)]
+
+
+z <- Y * (W/e.hat_filtered - (1-W)/(1-e.hat_filtered))
+
+# Using the fact that
+#z <- Y * (W/e.hat - (1-W)/(1-e.hat))
+ate.est <- mean(z)
+ate.se <- sd(z) / sqrt(length(z))
+ate.tstat <- ate.est / ate.se
+ate.pvalue <- 2*(pnorm(1 - abs(ate.est/ate.se)))
+ate.results <- c(estimate=ate.est, std.error=ate.se, t.stat=ate.tstat, pvalue=ate.pvalue)
+print(ate.results)
+```
+
+----
+
+##Analysis - combined years
+
+Rename columns
+```{r}
+foia2_2014 <- foia2_2014 %>%
+  rename(ChronicAbsenteeismRate = percent_ca)
+foia2_2015 <- foia2_2015 %>%
+  rename(NCESSCH = NCESSCH.x)
+foia2_2016 <- foia2_2016 %>%
+  select(c(-30)) %>%
+  rename(
+    NCESSCH = NCESSCH.x,
+    ChronicAbsenteeismRate = ChronicAbsenteeismRate_1718)
+foia2_2017 <- foia2_2017 %>%
+  select(c(-30)) %>%
+  rename(
+    NCESSCH = NCESSCH.x,
+    ChronicAbsenteeismRate = ChronicAbsenteeismRate_1819)
+```
+
+```{r}
+foia_joined <- rbind(foia2_2014, foia2_2015, foia2_2016, foia2_2017)
+```
+
+Regression:
+```{r}
+fmla <- as.formula(paste0("~", paste0("bs(`", covariates, "`, df=3)", collapse="+")))
+W <- foia_joined$treatment_indicator
+Y <- foia_joined$ChronicAbsenteeismRate
+XX <- model.matrix(fmla, foia_joined)
+logit <- cv.glmnet(x=XX, y=W, family="binomial")
+e.hat <- predict(logit, XX, s = "lambda.min", type="response")
+
+if (any(is.na(W)) || any(is.na(Y)) || any(is.na(e.hat))) {
+  stop("Missing values detected in the variables.")
+}
+
+# if (any(e.hat == 0) || any(e.hat == 1)) {
+#  stop("Division by zero detected in e.hat.")
+# }
+
+e.hat_filtered <- e.hat[!(e.hat == 0 | e.hat == 1)]
+Y <- Y[!(e.hat == 0 | e.hat == 1)]
+W <- W[!(e.hat == 0 | e.hat == 1)]
+
+
+z <- Y * (W/e.hat_filtered - (1-W)/(1-e.hat_filtered))
+
+# Using the fact that
+#z <- Y * (W/e.hat - (1-W)/(1-e.hat))
+ate.est <- mean(z)
+ate.se <- sd(z) / sqrt(length(z))
+ate.tstat <- ate.est / ate.se
+ate.pvalue <- 2*(pnorm(1 - abs(ate.est/ate.se)))
+ate.results <- c(estimate=ate.est, std.error=ate.se, t.stat=ate.tstat, pvalue=ate.pvalue)
+print(ate.results)
+```
+Visualizations
+```{r}
+ggplot(foia_joined, aes(x = Final.Score , y = ChronicAbsenteeismRate)) +
+  geom_point() +  # Add points
+  labs(x = "Final Score", y = "ChronicAbsenteeismRate") +  # Labels for axes
+  ggtitle("Scatterplot of ChronicAbsenteeismRate vs Final Score") +  # Title
+  theme_minimal()  # Minimal theme
+```
+
+----
+Suspensions
+
+Award Year 2014 - SY 2015-16
+```{r}
+suspension15 <- read.delim("C:/Users/nahia/Desktop/146 Project/suspension16.txt")
+suspension15 <- suspension15 %>%
+  filter(
+    AggregateLevel == "S",
+    ReportingCategory == "TA",
+    CharterYN != "All")
+suspension15 <- distinct(suspension15)
+suspension15$SchoolCode <- str_pad(suspension15$SchoolCode, width = 7, pad = "0")
+suspension15$DistrictCode <- str_pad(suspension15$DistrictCode, width = 5, pad = "0")
+suspension15$CDSCode <- paste(suspension15$DistrictCode, suspension15$SchoolCode, sep = "")
+suspension15$Suspension.Rate..Total. <- as.numeric(suspension15$Suspension.Rate..Total.)
+
+enrlmt_15 <- enrlmt_15 %>%
+  left_join(suspension15 %>% select(CDSCode, Suspension.Rate..Total.),
+            by=c("CDS_CODE" = "CDSCode"))
+
+foia2_2014 <- foia2_2014 %>%
+  left_join(enrlmt_15 %>% select(CDS_CODE, Suspension.Rate..Total.),
+            by = c("CDSCode" = "CDS_CODE"))
+
+foia2_2014 <- na.omit(foia2_2014)
+fmla <- as.formula(paste0("~", paste0("bs(`", covariates, "`, df=3)", collapse="+")))
+W <- foia2_2014$treatment_indicator
+Y <- foia2_2014$Suspension.Rate..Total.
+XX <- model.matrix(fmla, foia2_2014)
+logit <- cv.glmnet(x=XX, y=W, family="binomial")
+e.hat <- predict(logit, XX, s = "lambda.min", type="response")
+
+
+if (any(is.na(W)) || any(is.na(Y)) || any(is.na(e.hat))) {
+  stop("Missing values detected in the variables.")
+}
+
+# if (any(e.hat == 0) || any(e.hat == 1)) {
+#  stop("Division by zero detected in e.hat.")
+# }
+
+e.hat_filtered <- e.hat[!(e.hat == 0 | e.hat == 1)]
+Y <- Y[!(e.hat == 0 | e.hat == 1)]
+W <- W[!(e.hat == 0 | e.hat == 1)]
+
+
+z <- Y * (W/e.hat_filtered - (1-W)/(1-e.hat_filtered))
+
+# Using the fact that
+#z <- Y * (W/e.hat - (1-W)/(1-e.hat))
+ate.est <- mean(z)
+ate.se <- sd(z) / sqrt(length(z))
+ate.tstat <- ate.est / ate.se
+ate.pvalue <- 2*(pnorm(1 - abs(ate.est/ate.se)))
+ate.results <- c(estimate=ate.est, std.error=ate.se, t.stat=ate.tstat, pvalue=ate.pvalue)
+print(ate.results)
+```
+
+Award Year 2015 - SY 2016-17
+```{r}
+suspension16 <- read.delim("C:/Users/nahia/Desktop/146 Project/suspension17.txt")
+suspension16 <- suspension16 %>%
+  filter(
+    AggregateLevel == "S",
+    ReportingCategory == "TA",
+    CharterYN != "All")
+suspension16 <- distinct(suspension16)
+suspension16$SchoolCode <- str_pad(suspension16$SchoolCode, width = 7, pad = "0")
+suspension16$DistrictCode <- str_pad(suspension16$DistrictCode, width = 5, pad = "0")
+suspension16$CDSCode <- paste(suspension16$DistrictCode, suspension16$SchoolCode, sep = "")
+suspension16$Suspension.Rate..Total. <- as.numeric(suspension16$Suspension.Rate..Total.)
+enrlmt_1617 <- enrlmt_1617 %>%
+  left_join(suspension16 %>% select(CDSCode, Suspension.Rate..Total.),
+            by=c("CDS_CODE" = "CDSCode"))
+
+
+foia2_2015 <- foia2_2015 %>%
+  left_join(enrlmt_1617 %>% select(CDS_CODE, Suspension.Rate..Total.),
+            by = c("CDSCode" = "CDS_CODE"))
+
+foia2_2015 <- na.omit(foia2_2015)
+fmla <- as.formula(paste0("~", paste0("bs(`", covariates, "`, df=3)", collapse="+")))
+W <- foia2_2015$treatment_indicator
+Y <- foia2_2015$Suspension.Rate..Total.
+XX <- model.matrix(fmla, foia2_2015)
+logit <- cv.glmnet(x=XX, y=W, family="binomial")
+e.hat <- predict(logit, XX, s = "lambda.min", type="response")
+
+
+if (any(is.na(W)) || any(is.na(Y)) || any(is.na(e.hat))) {
+  stop("Missing values detected in the variables.")
+}
+
+# if (any(e.hat == 0) || any(e.hat == 1)) {
+#  stop("Division by zero detected in e.hat.")
+# }
+
+e.hat_filtered <- e.hat[!(e.hat == 0 | e.hat == 1)]
+Y <- Y[!(e.hat == 0 | e.hat == 1)]
+W <- W[!(e.hat == 0 | e.hat == 1)]
+
+
+z <- Y * (W/e.hat_filtered - (1-W)/(1-e.hat_filtered))
+
+# Using the fact that
+#z <- Y * (W/e.hat - (1-W)/(1-e.hat))
+ate.est <- mean(z)
+ate.se <- sd(z) / sqrt(length(z))
+ate.tstat <- ate.est / ate.se
+ate.pvalue <- 2*(pnorm(1 - abs(ate.est/ate.se)))
+ate.results <- c(estimate=ate.est, std.error=ate.se, t.stat=ate.tstat, pvalue=ate.pvalue)
+print(ate.results)
+```
+
+Award Year 2016 - SY 2017-18
+```{r}
+suspension17 <- read.delim("C:/Users/nahia/Desktop/146 Project/suspension18.txt")
+suspension17 <- suspension17 %>%
+  filter(
+    AggregateLevel == "S",
+    ReportingCategory == "TA",
+    CharterYN != "All")
+suspension17 <- distinct(suspension17)
+suspension17$SchoolCode <- str_pad(suspension17$SchoolCode, width = 7, pad = "0")
+suspension17$DistrictCode <- str_pad(suspension17$DistrictCode, width = 5, pad = "0")
+suspension17$CDSCode <- paste(suspension17$DistrictCode, suspension17$SchoolCode, sep = "")
+suspension17$Suspension.Rate..Total. <- as.numeric(suspension17$Suspension.Rate..Total.)
+enrlmt_1718 <- enrlmt_1718 %>%
+  left_join(suspension17 %>% select(CDSCode, Suspension.Rate..Total.),
+            by=c("CDS_CODE" = "CDSCode"))
+foia2_2016 <- foia2_2016 %>%
+  left_join(enrlmt_1718 %>% select(CDS_CODE, Suspension.Rate..Total.),
+            by = c("CDSCode" = "CDS_CODE"))
+foia2_2016 <- na.omit(foia2_2016)
+fmla <- as.formula(paste0("~", paste0("bs(`", covariates, "`, df=3)", collapse="+")))
+W <- foia2_2016$treatment_indicator
+Y <- foia2_2016$Suspension.Rate..Total.
+XX <- model.matrix(fmla, foia2_2016)
+logit <- cv.glmnet(x=XX, y=W, family="binomial")
+e.hat <- predict(logit, XX, s = "lambda.min", type="response")
+
+
+if (any(is.na(W)) || any(is.na(Y)) || any(is.na(e.hat))) {
+  stop("Missing values detected in the variables.")
+}
+
+# if (any(e.hat == 0) || any(e.hat == 1)) {
+#  stop("Division by zero detected in e.hat.")
+# }
+
+e.hat_filtered <- e.hat[!(e.hat == 0 | e.hat == 1)]
+Y <- Y[!(e.hat == 0 | e.hat == 1)]
+W <- W[!(e.hat == 0 | e.hat == 1)]
+
+
+z <- Y * (W/e.hat_filtered - (1-W)/(1-e.hat_filtered))
+
+# Using the fact that
+#z <- Y * (W/e.hat - (1-W)/(1-e.hat))
+ate.est <- mean(z)
+ate.se <- sd(z) / sqrt(length(z))
+ate.tstat <- ate.est / ate.se
+ate.pvalue <- 2*(pnorm(1 - abs(ate.est/ate.se)))
+ate.results <- c(estimate=ate.est, std.error=ate.se, t.stat=ate.tstat, pvalue=ate.pvalue)
+print(ate.results)
+```
+Award Year 2017 - SY 2018-19
+
+```{r}
+suspension18 <- read.delim("C:/Users/nahia/Desktop/146 Project/suspension19.txt")
+suspension18 <- suspension18 %>%
+  filter(
+    AggregateLevel == "S",
+    ReportingCategory == "TA",
+    CharterYN != "All")
+suspension18 <- distinct(suspension18)
+suspension18$SchoolCode <- str_pad(suspension18$SchoolCode, width = 7, pad = "0")
+suspension18$DistrictCode <- str_pad(suspension18$DistrictCode, width = 5, pad = "0")
+suspension18$CDSCode <- paste(suspension18$DistrictCode, suspension18$SchoolCode, sep = "")
+suspension18$Suspension.Rate..Total. <- as.numeric(suspension18$Suspension.Rate..Total.)
+enrlmt_1819 <- enrlmt_1819 %>%
+  left_join(suspension18 %>% select(CDSCode, Suspension.Rate..Total.),
+            by=c("CDS_CODE" = "CDSCode"))
+foia2_2017 <- foia2_2017 %>%
+  left_join(enrlmt_1819 %>% select(CDS_CODE, Suspension.Rate..Total.),
+            by = c("CDSCode" = "CDS_CODE"))
+foia2_2017 <- na.omit(foia2_2017)
+```
+
+Joint Data Analysis
+```{r}
+foia_joined <- rbind(foia2_2014, foia2_2015, foia2_2016, foia2_2017)
+```
+
+Regression:
+```{r}
+fmla <- as.formula(paste0("~", paste0("bs(`", covariates, "`, df=3)", collapse="+")))
+W <- foia_joined$treatment_indicator
+Y <- foia_joined$Suspension.Rate..Total.
+XX <- model.matrix(fmla, foia_joined)
+logit <- cv.glmnet(x=XX, y=W, family="binomial")
+e.hat <- predict(logit, XX, s = "lambda.min", type="response")
+
+if (any(is.na(W)) || any(is.na(Y)) || any(is.na(e.hat))) {
+  stop("Missing values detected in the variables.")
+}
+
+# if (any(e.hat == 0) || any(e.hat == 1)) {
+#  stop("Division by zero detected in e.hat.")
+# }
+
+e.hat_filtered <- e.hat[!(e.hat == 0 | e.hat == 1)]
+Y <- Y[!(e.hat == 0 | e.hat == 1)]
+W <- W[!(e.hat == 0 | e.hat == 1)]
+
+
+z <- Y * (W/e.hat_filtered - (1-W)/(1-e.hat_filtered))
+
+# Using the fact that
+#z <- Y * (W/e.hat - (1-W)/(1-e.hat))
+ate.est <- mean(z)
+ate.se <- sd(z) / sqrt(length(z))
+ate.tstat <- ate.est / ate.se
+ate.pvalue <- 2*(pnorm(1 - abs(ate.est/ate.se)))
+ate.results <- c(estimate=ate.est, std.error=ate.se, t.stat=ate.tstat, pvalue=ate.pvalue)
+print(ate.results)
+```
+
+```{r}
+library(ggplot2)
+
+# Assuming you have a data frame called foia_joined containing your data
+# Replace "covariates" with the names of the covariates you want to plot
+
+# Combine covariates with treatment indicator
+data_with_treatment <- cbind(foia_joined[, c("treatment_indicator")], foia_joined[, covariates])
+
+# Convert treatment indicator to a factor
+data_with_treatment$treatment_indicator <- factor(data_with_treatment$treatment_indicator, levels = c(0, 1), labels = c("Control", "Treatment"))
+
+# Reshape data for plotting
+data_long <- reshape2::melt(data_with_treatment, id.vars = "treatment_indicator")
+
+# Plot distributions
+ggplot(data_long, aes(value, fill = treatment_indicator)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~variable, scales = "free") +
+  labs(title = "Distribution of Covariates") +
+  theme_minimal()
+```
+
+---
+
+##Descriptive Statistics
+
+```{r}
+summary(
+  foia_joined %>% 
+    filter(treatment_indicator == 1) %>%
+    select(covariates)
+)
+```
+```{r}
+treated_stats <- foia_joined %>%
+  filter(treatment_indicator == 1) %>%
+  select(covariates, ChronicAbsenteeismRate, Suspension.Rate..Total.)
+
+control_stats <- foia_joined %>%
+  filter(treatment_indicator == 0) %>%
+  select(covariates, ChronicAbsenteeismRate, Suspension.Rate..Total.)
+```
+
+```{r}
+treated_summary <- sapply(treated_stats, function(x) c(mean = mean(x), median = median(x), sd = sd(x), min = min(x), max = max(x)))
+```
+
+```{r}
+control_summary <- sapply(control_stats, function(x) c(mean = mean(x), median = median(x), sd = sd(x), min = min(x), max = max(x)))
+```
+
+```{r}
+write.table(control_summary, "clipboard", sep = "\t", row.names = FALSE, col.names = TRUE)
+```
+
+```{r}
+treated_stats_by <- foia_joined %>%
+  filter(treatment_indicator == 1)
+  select(Fiscal_Year, covariates, ChronicAbsenteeismRate, Suspension.Rate..Total.)
+
+sapply(treated_stats_by, function(x) c(mean = mean(x), median = median(x), sd = sd(x), min = min(x), max = max(x)))
+```
+
+```{r}
+
+t.test(treated_stats$ChronicAbsenteeismRate, 
+       control_stats$ChronicAbsenteeismRate)
+```
+```{r}
+t.test(treated_stats$Suspension.Rate..Total., 
+       control_stats$Suspension.Rate..Total.)
+```
+
+```{r}
+t_test_results <- Map(t.test, treated_stats, control_stats)
+```
+
+```{r}
+library(purrr)
+library(broom)
+
+# Combine t-test results into a dataframe
+t_test_df <- map_dfr(names(t_test_results), ~ {
+  result <- t_test_results[[.x]]
+  data.frame(
+    Variable = .x,
+    t_value = result$statistic,
+    df = result$parameter,
+    p_value = result$p.value,
+    conf_interval_lower = result$conf.int[1],
+    conf_interval_upper = result$conf.int[2],
+    mean_treated = result$estimate[1],
+    mean_control = result$estimate[2]
+  )
+})
+```
+
+---
+```{r}
+foia3_2015 <- foia_2015[complete.cases(foia_2015$ChronicAbsenteeismRate), ]
+foia3_2015 <- foia3_2015 %>%
+  filter(!rowSums(is.na(.[21:28])) == length(21:28))
+foia3_2015 <- foia3_2015 %>%
+  mutate(across(21:29, ~ ifelse(is.na(.), 0, .)))
+foia3_2015 <- foia3_2015 %>%
+  group_by(NAME) %>%
+  mutate(max_or_min = if_else(any(treatment_indicator == 1), "max", "min")) %>%
+  slice(if (first(max_or_min) == "max") which.max(Final.Score) else which.min(Final.Score)) %>%
+  ungroup()
+```
+
+
+```{r}
+covariates <- c("Final.Score", "Asian",  "African American", "Filipino", "Hispanic or Latino", "American Indian", "Pacific Islander", "Two or More Races", "White", "Percent......Eligible.Free...K.12.")
+foia3_2015 <- na.omit(foia3_2015)
+fmla <- as.formula(paste0("~", paste0("bs(`", covariates, "`, df=3)", collapse="+")))
+W <- foia3_2015$treatment_indicator
+Y <- foia3_2015$ChronicAbsenteeismRate
+XX <- model.matrix(fmla, foia3_2015)
+logit <- cv.glmnet(x=XX, y=W, family="binomial")
+e.hat <- predict(logit, XX, s = "lambda.min", type="response")
+
+
+if (any(is.na(W)) || any(is.na(Y)) || any(is.na(e.hat))) {
+  stop("Missing values detected in the variables.")
+}
+
+# if (any(e.hat == 0) || any(e.hat == 1)) {
+#  stop("Division by zero detected in e.hat.")
+# }
+
+e.hat_filtered <- e.hat[!(e.hat == 0 | e.hat == 1)]
+Y <- Y[!(e.hat == 0 | e.hat == 1)]
+W <- W[!(e.hat == 0 | e.hat == 1)]
+
+
+z <- Y * (W/e.hat_filtered - (1-W)/(1-e.hat_filtered))
+
+# Using the fact that
+#z <- Y * (W/e.hat - (1-W)/(1-e.hat))
+ate.est <- mean(z)
+ate.se <- sd(z) / sqrt(length(z))
+ate.tstat <- ate.est / ate.se
+ate.pvalue <- 2*(pnorm(1 - abs(ate.est/ate.se)))
+ate.results <- c(estimate=ate.est, std.error=ate.se, t.stat=ate.tstat, pvalue=ate.pvalue)
+print(ate.results)
+```
+
+```{r}
+foia_short <- foia_complete %>%
+  select(1:15)
+```
+
+```{r}
+foia_short <- distinct(foia_short)
+```
+
+```{r}
+foia_short_summary_yr <- foia_short %>%
+  group_by(treatment_indicator, Fiscal_Year) %>%
+  summarise(
+    num_observations = n(),
+    mean_officers_awarded = mean(Officers_awarded),
+    mean_final_score = mean(Final.Score),
+    sd_officers_awarded = sd(Officers_awarded),
+    sd_final_score = sd(Final.Score)
+  )
+foia_short_summary_yr
+```
+```{r}
+foia_short_summary <- foia_short %>%
+  group_by(treatment_indicator) %>%
+  summarise(
+    num_observations = n(),
+    mean_officers_awarded = mean(Officers_awarded),
+    mean_final_score = mean(Final.Score),
+    sd_officers_awarded = sd(Officers_awarded),
+    sd_final_score = sd(Final.Score)
+  )
+foia_short_summary
+```
+```{r}
+write.table(foia_short_summary, "clipboard", sep = "\t", row.names = FALSE, col.names = TRUE)
+```
+
+```{r}
+write.table(foia_short_summary_yr, "clipboard", sep = "\t", row.names = FALSE, col.names = TRUE)
+```
+

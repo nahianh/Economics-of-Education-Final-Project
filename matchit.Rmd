@@ -1,0 +1,301 @@
+---
+title: "Matchit"
+author: "Nahian Haque"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(splines)
+library(glmnet)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(DescTools)
+library(stringr)
+library(stringdist)
+library(grf)
+library("MatchIt")
+```
+
+```{r}
+enrollment_15 <- read.delim("C:/Users/nahia/Downloads/filesenr.asp(4).txt")
+enrollment_15 <- enrollment_15 %>%
+  mutate(CDS_CODE = as.character(CDS_CODE)) %>%
+  group_by(CDS_CODE) %>%
+  mutate(total_enrollment = sum(ENR_TOTAL, na.rm = TRUE))
+
+enrollment_16 <- read.delim("C:/Users/nahia/Downloads/filesenr.asp(5).txt")
+enrollment_16 <- enrollment_16 %>%
+  mutate(CDS_CODE = as.character(CDS_CODE)) %>%
+  group_by(CDS_CODE) %>%
+  mutate(total_enrollment = sum(ENR_TOTAL, na.rm = TRUE))
+
+enrollment_17 <- read.delim("C:/Users/nahia/Downloads/filesenr.asp(6).txt")
+enrollment_17 <- enrollment_17 %>%
+  mutate(CDS_CODE = as.character(CDS_CODE)) %>%
+  group_by(CDS_CODE) %>%
+  mutate(total_enrollment = sum(ENR_TOTAL, na.rm = TRUE))
+
+enrollment_18 <- read.delim("C:/Users/nahia/Downloads/filesenr.asp(7).txt")
+enrollment_18 <- enrollment_18 %>%
+  mutate(CDS_CODE = as.character(CDS_CODE)) %>%
+  group_by(CDS_CODE) %>%
+  mutate(total_enrollment = sum(ENR_TOTAL, na.rm = TRUE))
+```
+
+```{r}
+enrollment_15$CDS_CODE <- substr(enrollment_15$CDS_CODE,  3, nchar(enrollment_15$CDS_CODE))
+enrollment_16$CDS_CODE <- substr(enrollment_16$CDS_CODE,  3, nchar(enrollment_16$CDS_CODE))
+enrollment_17$CDS_CODE <- substr(enrollment_17$CDS_CODE,  3, nchar(enrollment_17$CDS_CODE))
+enrollment_18$CDS_CODE <- substr(enrollment_18$CDS_CODE,  3, nchar(enrollment_18$CDS_CODE))
+```
+
+```{r}
+foia2_2014 <- foia2_2014 %>%
+  left_join(enrollment_15 %>% 
+              select(CDS_CODE, total_enrollment), by=c("CDSCode" = "CDS_CODE"))
+foia2_2015 <- foia2_2015 %>%
+  left_join(enrollment_16 %>% 
+              select(CDS_CODE, total_enrollment), by=c("CDSCode" = "CDS_CODE"))
+foia2_2016 <- foia2_2016 %>%
+  left_join(enrollment_17 %>% 
+              select(CDS_CODE, total_enrollment), by=c("CDSCode" = "CDS_CODE"))
+foia2_2017 <- foia2_2017 %>%
+  left_join(enrollment_18 %>% 
+              select(CDS_CODE, total_enrollment), by=c("CDSCode" = "CDS_CODE"))
+```
+
+```{r}
+foia2_2014 <- distinct(foia2_2014)
+foia2_2015 <- distinct(foia2_2015)
+foia2_2016 <- distinct(foia2_2016)
+foia2_2017 <- distinct(foia2_2017)
+```
+
+```{r}
+foia_joined <- rbind(foia2_2014, foia2_2015, foia2_2016, foia2_2017)
+```
+
+```{r}
+foia_joined <- foia_joined %>%
+  select(-c(32)) %>%
+  rename(
+    Percent_Free_Lunch = `Percent......Eligible.Free...K.12.`,
+    Total_Enrollment = `total_enrollment.y`
+  )
+```
+
+```{r}
+covariates2 <- c("Final.Score", "African American", "Hispanic or Latino", "White", 
+                 "Percent_Free_Lunch", "Total_Enrollment")
+```
+
+```{r}
+foia_joined <- foia_joined %>%
+  group_by(NAME) %>%
+  slice_min(Final.Score) %>%
+  ungroup()
+```
+
+```{r}
+#foia_joined <- na.omit(foia_joined$Total_Enrollment)
+```
+
+---
+Descriptive Statistics before matching:
+```{r}
+foia_joined_1 <- foia_joined %>%
+  select(covariates2, treatment_indicator) %>%
+  filter(treatment_indicator == 1)
+foia_joined_0 <- foia_joined %>%
+  select(covariates2, treatment_indicator) %>%
+  filter(treatment_indicator == 0)
+```
+
+```{r}
+summary(foia_joined_1)
+```
+```{r}
+summary(foia_joined_0)
+```
+write.table(control_summary, "clipboard", sep = "\t", row.names = FALSE, col.names = TRUE)
+
+```{r}
+write.table(sapply(foia_joined_1, function(x) c(mean = mean(x), median = median(x), sd = sd(x), min = min(x), max = max(x))),
+            "clipboard", sep = "\t", row.names = FALSE, col.names = TRUE)
+```
+
+```{r}
+write.table(sapply(foia_joined_0, function(x) c(mean = mean(x), median = median(x), sd = sd(x), min = min(x), max = max(x))),
+            "clipboard", sep = "\t", row.names = FALSE, col.names = TRUE)
+```
+
+
+```{r}
+foia_joined <- foia_joined[complete.cases(foia_joined$Total_Enrollment), ]
+```
+
+
+```{r}
+m1 = matchit(treatment_indicator ~ 
+               Final.Score + `African American` +
+               `Hispanic or Latino` +  White + `Percent_Free_Lunch` + Total_Enrollment,
+             method = "nearest", distance = "mahalanobis", replace=FALSE, data = foia_joined)
+
+summary(m1)
+```
+
+```{r}
+plot(summary(m1))
+```
+
+
+```{r}
+m1data = match.data(m1)
+```
+
+```{r}
+
+paired_t_test <- function(variable) {
+  t_test_result <- t.test(m1data[[variable]][m1data$treatment_indicator == 1],
+                          m1data[[variable]][m1data$treatment_indicator == 0],
+                          paired = TRUE)
+  return(t_test_result)
+}
+
+# Apply the function to each variable
+results <- lapply(covariates2, paired_t_test)
+
+# Print the results
+names(results) <- covariates2
+results
+```
+
+```{r}
+library("marginaleffects")
+model <- lm(Suspension.Rate..Total. ~ 
+              treatment_indicator * (Final.Score + `African American` +
+               `Hispanic or Latino` +  White + `Percent_Free_Lunch` + Total_Enrollment),
+            data=m1data, weights = weights)
+avg_comparisons(model,
+                variables = "treatment_indicator",
+                vcov = ~subclass,
+                newdata = subset(m1data, treatment_indicator == 1),
+                wts = "weights")
+```
+
+
+```{r}
+t.test(m1data$ChronicAbsenteeismRate[m1data$treatment_indicator==1], 
+       m1data$ChronicAbsenteeismRate[m1data$treatment_indicator==0], paired = T)
+```
+```{r}
+m1data$tind2 <- as.factor(m1data$treatment_indicator)
+ggplot(m1data, aes(x = `ChronicAbsenteeismRate`, fill = tind2)) +
+    geom_density(position="identity", alpha=0.6) +
+    scale_fill_brewer(palette="Dark2") +
+    ggtitle("Density Plot of Chronic Absenteeism Rate") +
+    scale_x_continuous(name = "Chronic Absenteeism Rate",
+    breaks = seq(0, 100, 20),
+        limits=c(0, 100)) +
+    scale_y_continuous(name = "Density") +
+        theme(plot.title = element_text(size = 14, face = "bold"),
+              text = element_text(size = 12)) +
+    guides(fill=guide_legend(title=NULL))+ 
+    scale_fill_discrete(labels=c("Control - No Grant", "Treatment - Grant"))
+```
+```{r}
+t.test(m1data$Suspension.Rate..Total.[m1data$treatment_indicator==1], 
+       m1data$Suspension.Rate..Total.[m1data$treatment_indicator==0], paired = T)
+```
+
+```{r}
+m1data$tind2 <- as.factor(m1data$treatment_indicator)
+ggplot(m1data, aes(x = `Suspension.Rate..Total.`, fill = tind2)) +
+    geom_density(position="identity", alpha=0.6) +
+    scale_fill_brewer(palette="Dark2") +
+    ggtitle("Density Plot of Total Suspension Rate") +
+    scale_x_continuous(name = "Total Suspension Rate",
+    breaks = seq(0, 100, 20),
+        limits=c(0, 100)) +
+    scale_y_continuous(name = "Density") +
+        theme(plot.title = element_text(size = 14, face = "bold"),
+              text = element_text(size = 12)) +
+    guides(fill=guide_legend(title=NULL))+ 
+    scale_fill_discrete(labels=c("Control - No Grant", "Treatment - Grant"))
+```
+
+##By Year
+```{r}
+m1_2014 = matchit(treatment_indicator ~ 
+               Final.Score + Asian + `African American` + Filipino +
+               `Hispanic or Latino` + `American Indian` + `Pacific Islander` +
+               `Two or More Races` + White + `Percent......Eligible.Free...K.12.`,
+             method = "nearest", distance = "mahalanobis", replace=FALSE, data = foia2_2014)
+
+summary(m1_2014)
+```
+
+```{r}
+m1_2014_data = match.data(m1_2014)
+```
+
+
+```{r}
+t.test(m1_2014_data$ChronicAbsenteeismRate[m1data$treatment_indicator==1], 
+       m1_2014_data$ChronicAbsenteeismRate[m1data$treatment_indicator==0], paired = T)
+```
+
+```{r}
+m1_2014_data$tind2 <- as.factor(m1_2014_data$treatment_indicator)
+ggplot(m1_2014_data, aes(x = `ChronicAbsenteeismRate`, fill = tind2)) +
+    geom_density(position="identity", alpha=0.6) +
+    scale_fill_brewer(palette="Dark2") +
+    ggtitle("Density plot of ChronicAbsenteeismRate, by group") +
+    scale_x_continuous(name = "ChronicAbsenteeismRate",
+    breaks = seq(0, 100, 20),
+        limits=c(0, 100)) +
+    scale_y_continuous(name = "Density") +
+        theme(plot.title = element_text(size = 14, face = "bold"),
+              text = element_text(size = 12)) +
+    guides(fill=guide_legend(title=NULL))+ 
+    scale_fill_discrete(labels=c("Control - No Grant", "Treatment - Grant"))
+```
+
+```{r}
+m1_2015 = matchit(treatment_indicator ~ 
+               Final.Score + Asian + `African American` + Filipino +
+               `Hispanic or Latino` + `American Indian` + `Pacific Islander` +
+               `Two or More Races` + White + `Percent......Eligible.Free...K.12.`,
+             method = "nearest", distance = "mahalanobis", replace=FALSE, data = foia2_2015)
+
+
+m1_2015_data = match.data(m1_2015)
+```
+
+```{r}
+t.test(m1_2015_data$ChronicAbsenteeismRate[m1data$treatment_indicator==1], 
+       m1_2015_data$ChronicAbsenteeismRate[m1data$treatment_indicator==0], paired = T)
+```
+```{r}
+m1_2015_data$tind2 <- as.factor(m1_2015_data$treatment_indicator)
+ggplot(m1_2015_data, aes(x = `ChronicAbsenteeismRate`, fill = tind2)) +
+    geom_density(position="identity", alpha=0.6) +
+    scale_fill_brewer(palette="Dark2") +
+    ggtitle("Density plot of ChronicAbsenteeismRate, by group") +
+    scale_x_continuous(name = "ChronicAbsenteeismRate",
+    breaks = seq(0, 100, 20),
+        limits=c(0, 100)) +
+    scale_y_continuous(name = "Density") +
+        theme(plot.title = element_text(size = 14, face = "bold"),
+              text = element_text(size = 12)) +
+    guides(fill=guide_legend(title=NULL))+ 
+    scale_fill_discrete(labels=c("Control - No Grant", "Treatment - Grant"))
+```
+
