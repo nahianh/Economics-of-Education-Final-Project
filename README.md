@@ -3,8 +3,8 @@ This respository contains the R code I used for my Economics of Education final 
 
 This study tests the claim that school policing negatively affects the learning environment by leading to student detachment in the form of excessive absences and lost instructional time due to exclusionary discipline. Specifically, I investigate the impacts of receiving a federal school policing grant on the chronic absenteeism and suspension rates of California public middle and high schools. Leveraging data on agencies who applied for a COPS Hiring Program (CHP) grant between 2014-2017, I identify a set of treated schools that received the grant and a set of untreated schools whose applications were rejected through propensity score matching. Conducting a paired t-test to estimate the mean sample differences in the chronic absenteeism and suspension rates, I find statistically significant evidence that schools receiving the grant experienced higher suspension rates. However, I do not find evidence to suggest that the CHP grant impacts chronic absenteeism. 
 
-![alt](https://github.com/nahianh/Economics-of-Education-Final-Project/blob/main/146plot1.png)
-![alt](https://github.com/nahianh/Economics-of-Education-Final-Project/blob/main/146plot2.png)
+![alt](https://github.com/nahianh/Economics-of-Education-Final-Project/blob/main/146plot1.png?raw=true)
+![alt](https://github.com/nahianh/Economics-of-Education-Final-Project/blob/main/146plot2.png?raw=true)
 
 
 My analysis relies on agency-level data obtained via a FOIA request to the COPS office. The approved request included information on the application year, award status, and Originating Agency Identifier (ORI) numbers for all 101 California agencies that applied for a CHP grant for school-based policing between 2014 and 2020. According to the FOIA request response, the COPS office was unable to locate applications prior to 2014, despite the program’s onset in 2006. Using the publicly released applicant ranking documents available on the COPS website, I appended the application scores to this data. 
